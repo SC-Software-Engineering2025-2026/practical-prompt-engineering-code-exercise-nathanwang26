@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Prompt Library</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1 class="logo">Prompt Library</h1>
+      <div class="controls">
+        <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
+          🌙
+        </button>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="panel form-panel">
+        <h2>Add Prompt</h2>
+        <div class="form-row">
+          <label for="promptTitle">Title</label>
+          <input
+            id="promptTitle"
+            type="text"
+            placeholder="Short descriptive title"
+          />
+        </div>
+        <div class="form-row">
+          <label for="promptContent">Prompt</label>
+          <textarea
+            id="promptContent"
+            rows="6"
+            placeholder="Write your prompt here..."
+          ></textarea>
+        </div>
+        <div class="form-actions">
+          <button id="savePrompt" class="btn primary">Save Prompt</button>
+        </div>
+      </section>
+
+      <section class="panel list-panel">
+        <h2>Saved Prompts</h2>
+        <div id="promptsList" class="cards"></div>
+      </section>
+    </main>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
