@@ -1,6 +1,8 @@
-// Simple Prompt Library: localStorage-backed
+// Simple Prompt Library: localStorage-backed with 5-star rating
 const STORAGE_KEY = "prompt_library.prompts";
 const THEME_KEY = "prompt_library.theme";
+
+let currentFilter = null; // e.g. 'top-rated'
 
 function $(sel) {
   return document.querySelector(sel);
@@ -24,7 +26,12 @@ function savePrompts(prompts) {
 function renderPrompts() {
   const container = $("#promptsList");
   container.innerHTML = "";
-  const prompts = loadPrompts().slice().reverse();
+  let prompts = loadPrompts().slice().reverse();
+
+  if (currentFilter === "top-rated") {
+    prompts = prompts.filter((p) => (p.rating || 0) >= 4.0);
+  }
+
   if (prompts.length === 0) {
     container.innerHTML =
       '<div class="empty">No prompts yet — add one above.</div>';
@@ -45,6 +52,18 @@ function renderPrompts() {
     meta.appendChild(h3);
     meta.appendChild(preview);
 
+    // Rating area
+    const ratingWrap = document.createElement("div");
+    ratingWrap.className = "rating";
+    const starsContainer = document.createElement("div");
+    starsContainer.className = "stars";
+    ratingWrap.appendChild(starsContainer);
+    const label = document.createElement("div");
+    label.className = "rating-label";
+    label.textContent = `${(p.rating || 0).toFixed(1)} (${p.ratingCount || 0})`;
+    ratingWrap.appendChild(label);
+    meta.appendChild(ratingWrap);
+
     const actions = document.createElement("div");
     actions.className = "actions";
     const del = document.createElement("button");
@@ -58,6 +77,9 @@ function renderPrompts() {
     card.appendChild(meta);
     card.appendChild(actions);
     container.appendChild(card);
+
+    // Render the star controls for this prompt
+    renderStars(starsContainer, p);
   });
 }
 
@@ -75,6 +97,10 @@ function addPrompt(title, content) {
     title: title.trim(),
     content: content.trim(),
     created: Date.now(),
+    // rating metadata
+    rating: 0,
+    ratingCount: 0,
+    userRating: 0,
   };
   prompts.push(entry);
   savePrompts(prompts);
@@ -85,6 +111,85 @@ function deletePrompt(id) {
   const prompts = loadPrompts().filter((p) => p.id !== id);
   savePrompts(prompts);
   renderPrompts();
+}
+
+function setRating(promptId, newRating) {
+  const prompts = loadPrompts();
+  const p = prompts.find((x) => x.id === promptId);
+  if (!p) return;
+
+  const prevUserRating = p.userRating || 0;
+  const prevCount = p.ratingCount || 0;
+  const prevTotal = (p.rating || 0) * prevCount;
+
+  if (!prevUserRating) {
+    // new rater
+    p.ratingCount = prevCount + 1;
+    p.userRating = newRating;
+    p.rating = (prevTotal + newRating) / p.ratingCount;
+  } else {
+    // update existing user's rating
+    p.userRating = newRating;
+    p.rating = (prevTotal - prevUserRating + newRating) / p.ratingCount;
+  }
+
+  // normalize to one decimal
+  p.rating = Math.round((p.rating || 0) * 10) / 10;
+
+  savePrompts(prompts);
+  renderPrompts();
+  document.dispatchEvent(
+    new CustomEvent("rating:changed", {
+      detail: { id: promptId, rating: p.rating },
+    })
+  );
+}
+
+function renderStars(container, prompt) {
+  container.innerHTML = "";
+  const current = prompt.userRating || Math.round(prompt.rating || 0);
+
+  for (let i = 1; i <= 5; i++) {
+    const star = document.createElement("button");
+    star.className = "star";
+    if (i <= current) star.classList.add("filled");
+    star.type = "button";
+    star.dataset.value = i;
+    star.setAttribute("aria-label", `${i} star${i > 1 ? "s" : ""}`);
+    star.setAttribute("aria-pressed", (i <= current).toString());
+
+    star.addEventListener("click", () => {
+      setRating(prompt.id, i);
+    });
+
+    star.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") {
+        const prev = star.previousElementSibling;
+        if (prev) prev.focus();
+      }
+      if (e.key === "ArrowRight") {
+        const next = star.nextElementSibling;
+        if (next) next.focus();
+      }
+      if (e.key === "Enter" || e.key === " ") star.click();
+    });
+
+    // hover preview
+    star.addEventListener("mouseover", () => {
+      Array.from(container.children).forEach((s, idx) => {
+        s.classList.toggle("filled", idx < i);
+      });
+    });
+    star.addEventListener("mouseout", () => {
+      Array.from(container.children).forEach((s, idx) => {
+        s.classList.toggle("filled", idx < current);
+      });
+    });
+
+    // text content star glyph
+    star.textContent = "★";
+    container.appendChild(star);
+  }
 }
 
 function setupHandlers() {
@@ -107,6 +212,19 @@ function setupHandlers() {
     localStorage.setItem(THEME_KEY, isDark ? "dark" : "light");
     updateThemeIcon();
   });
+
+  const topBtn = $("#filterTopRated");
+  const clearBtn = $("#clearFilter");
+  if (topBtn)
+    topBtn.addEventListener("click", () => {
+      currentFilter = "top-rated";
+      renderPrompts();
+    });
+  if (clearBtn)
+    clearBtn.addEventListener("click", () => {
+      currentFilter = null;
+      renderPrompts();
+    });
 }
 
 function applySavedTheme() {

@@ -187,3 +187,50 @@ textarea:focus {
     padding-bottom: 12px;
   }
 }
+
+/* Star rating styles */
+.rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stars {
+  display: inline-flex;
+  gap: 4px;
+}
+.star {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px;
+}
+.star:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 60%, white 40%);
+  outline-offset: 2px;
+}
+.star.filled {
+  color: gold;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+.rating-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.list-controls .btn {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+.empty {
+  color: var(--muted);
+  padding: 14px;
+}
