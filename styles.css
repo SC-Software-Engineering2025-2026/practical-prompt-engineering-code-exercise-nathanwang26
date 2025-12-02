@@ -234,3 +234,115 @@ textarea:focus {
   color: var(--muted);
   padding: 14px;
 }
+
+/* Notes UI */
+.notes-btn {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.notes-badge {
+  background: var(--primary);
+  color: white;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.notes-panel {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  max-width: 640px;
+  background: var(--panel);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 14px;
+  z-index: 1200;
+}
+.notes-panel[hidden] {
+  display: none;
+}
+.notes-panel .notes-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.notes-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.notes-panel .notes-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+.note-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 8px;
+  border-radius: 8px;
+}
+.note-item .note-text {
+  white-space: pre-wrap;
+  flex: 1;
+  color: var(--text);
+}
+.note-actions {
+  display: flex;
+  gap: 6px;
+}
+.note-actions button {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 0;
+  cursor: pointer;
+}
+.notes-panel .new-note {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+.notes-panel textarea {
+  flex: 1;
+  min-height: 72px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--glass);
+  color: var(--text);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.notes-panel .panel-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.notes-error {
+  color: #ffb4b4;
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+
+/* Dim backdrop when notes panel open */
+.notes-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.45);
+  z-index: 1100;
+}

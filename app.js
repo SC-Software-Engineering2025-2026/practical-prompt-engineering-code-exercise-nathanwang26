@@ -66,6 +66,23 @@ function renderPrompts() {
 
     const actions = document.createElement("div");
     actions.className = "actions";
+
+    // Notes button with badge
+    const notesBtn = document.createElement("button");
+    notesBtn.className = "notes-btn";
+    notesBtn.type = "button";
+    notesBtn.dataset.promptId = p.id;
+    notesBtn.innerHTML = "📝";
+    const count = (p.notes && p.notes.length) || 0;
+    if (count > 0) {
+      const badge = document.createElement("span");
+      badge.className = "notes-badge";
+      badge.textContent = count;
+      notesBtn.appendChild(badge);
+    }
+    notesBtn.addEventListener("click", () => openNotes(p.id));
+    actions.appendChild(notesBtn);
+
     const del = document.createElement("button");
     del.className = "delete";
     del.textContent = "Delete";
@@ -191,6 +208,228 @@ function renderStars(container, prompt) {
     container.appendChild(star);
   }
 }
+
+/* ---------------- Notes feature ---------------- */
+
+function ensureNotesArray(prompt) {
+  if (!prompt.notes) prompt.notes = [];
+}
+
+function openNotes(promptId) {
+  const prompts = loadPrompts();
+  const p = prompts.find((x) => x.id === promptId);
+  if (!p) return;
+  ensureNotesArray(p);
+
+  const panel = document.getElementById("notesPanel");
+  panel.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "notes-header";
+  const title = document.createElement("h3");
+  title.id = "notesTitle";
+  title.textContent = `Notes — ${p.title || "(untitled)"}`;
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.textContent = "Close";
+  closeBtn.addEventListener("click", closeNotes);
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+
+  const list = document.createElement("div");
+  list.className = "notes-list";
+  panel.appendChild(list);
+
+  function buildNoteItem(note) {
+    const item = document.createElement("div");
+    item.className = "note-item";
+    const text = document.createElement("div");
+    text.className = "note-text";
+    text.textContent = note.text;
+    item.appendChild(text);
+
+    const actions = document.createElement("div");
+    actions.className = "note-actions";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "Edit";
+    edit.addEventListener("click", () => {
+      enterEditMode(note, item, promptId);
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      if (!confirm("Delete this note?")) return;
+      deleteNote(promptId, note.id);
+    });
+    actions.appendChild(edit);
+    actions.appendChild(del);
+    item.appendChild(actions);
+    return item;
+  }
+
+  if (p.notes.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No notes yet — add one below.";
+    list.appendChild(empty);
+  } else {
+    p.notes
+      .slice()
+      .reverse()
+      .forEach((n) => list.appendChild(buildNoteItem(n)));
+  }
+
+  // new note area
+  const newWrap = document.createElement("div");
+  newWrap.className = "new-note";
+  const ta = document.createElement("textarea");
+  ta.placeholder = "Write a note...";
+  const addBtn = document.createElement("button");
+  addBtn.type = "button";
+  addBtn.className = "btn primary";
+  addBtn.textContent = "Add Note";
+  addBtn.addEventListener("click", () => {
+    const text = ta.value.trim();
+    if (!text) return;
+    try {
+      addNote(promptId, text);
+      // reopen to refresh
+      openNotes(promptId);
+    } catch (err) {
+      showNotesError(panel, "Unable to save note.");
+    }
+  });
+  newWrap.appendChild(ta);
+  newWrap.appendChild(addBtn);
+  panel.appendChild(newWrap);
+
+  const err = document.createElement("div");
+  err.className = "notes-error";
+  panel.appendChild(err);
+
+  // backdrop
+  const existingBackdrop = document.querySelector(".notes-backdrop");
+  if (!existingBackdrop) {
+    const bd = document.createElement("div");
+    bd.className = "notes-backdrop";
+    bd.addEventListener("click", closeNotes);
+    document.body.appendChild(bd);
+  }
+
+  panel.hidden = false;
+  document.body.classList.add("notes-open");
+
+  // keyboard close
+  function onKey(e) {
+    if (e.key === "Escape") closeNotes();
+  }
+  panel._onKey = onKey;
+  document.addEventListener("keydown", onKey);
+}
+
+function closeNotes() {
+  const panel = document.getElementById("notesPanel");
+  if (!panel) return;
+  panel.hidden = true;
+  panel.innerHTML = "";
+  const bd = document.querySelector(".notes-backdrop");
+  if (bd) bd.remove();
+  document.body.classList.remove("notes-open");
+  if (panel._onKey) document.removeEventListener("keydown", panel._onKey);
+}
+
+function showNotesError(panel, msg) {
+  const err = panel.querySelector(".notes-error");
+  if (err) err.textContent = msg;
+}
+
+function addNote(promptId, text) {
+  const prompts = loadPrompts();
+  const p = prompts.find((x) => x.id === promptId);
+  if (!p) throw new Error("Prompt not found");
+  ensureNotesArray(p);
+  const note = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    text,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  p.notes.push(note);
+  try {
+    savePrompts(prompts);
+  } catch (e) {
+    throw e;
+  }
+}
+
+function enterEditMode(note, itemEl, promptId) {
+  itemEl.innerHTML = "";
+  const ta = document.createElement("textarea");
+  ta.value = note.text;
+  ta.style.minHeight = "72px";
+  const actions = document.createElement("div");
+  actions.className = "note-actions";
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = "Save";
+  save.addEventListener("click", () => {
+    const newText = ta.value.trim();
+    if (!newText) return;
+    try {
+      updateNote(promptId, note.id, newText);
+      openNotes(promptId);
+    } catch (err) {
+      const panel = document.getElementById("notesPanel");
+      showNotesError(panel, "Unable to save note.");
+    }
+  });
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => openNotes(promptId));
+  actions.appendChild(save);
+  actions.appendChild(cancel);
+  itemEl.appendChild(ta);
+  itemEl.appendChild(actions);
+}
+
+function updateNote(promptId, noteId, newText) {
+  const prompts = loadPrompts();
+  const p = prompts.find((x) => x.id === promptId);
+  if (!p) throw new Error("Prompt not found");
+  ensureNotesArray(p);
+  const n = p.notes.find((x) => x.id === noteId);
+  if (!n) throw new Error("Note not found");
+  n.text = newText;
+  n.updatedAt = Date.now();
+  try {
+    savePrompts(prompts);
+  } catch (e) {
+    throw e;
+  }
+}
+
+function deleteNote(promptId, noteId) {
+  const prompts = loadPrompts();
+  const p = prompts.find((x) => x.id === promptId);
+  if (!p) return;
+  ensureNotesArray(p);
+  p.notes = p.notes.filter((x) => x.id !== noteId);
+  try {
+    savePrompts(prompts);
+    // refresh UI
+    renderPrompts();
+    openNotes(promptId);
+  } catch (e) {
+    const panel = document.getElementById("notesPanel");
+    showNotesError(panel, "Unable to delete note.");
+  }
+}
+
+/* ---------------- end Notes feature ---------------- */
 
 function setupHandlers() {
   $("#savePrompt").addEventListener("click", () => {
