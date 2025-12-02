@@ -35,6 +35,19 @@
             placeholder="Write your prompt here..."
           ></textarea>
         </div>
+        <div class="form-row">
+          <label for="modelName">Model</label>
+          <input id="modelName" type="text" placeholder="e.g., gpt-4o-mini" />
+        </div>
+        <div
+          class="form-row"
+          style="display: flex; align-items: center; gap: 8px"
+        >
+          <input id="isCode" type="checkbox" />
+          <label for="isCode"
+            >Treat content as code (affects token estimate)</label
+          >
+        </div>
         <div class="form-actions">
           <button id="savePrompt" class="btn primary">Save Prompt</button>
         </div>

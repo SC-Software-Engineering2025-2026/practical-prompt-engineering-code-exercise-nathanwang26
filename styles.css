@@ -346,3 +346,32 @@ textarea:focus {
   background: rgba(2, 6, 23, 0.45);
   z-index: 1100;
 }
+
+/* Metadata display for prompts */
+.metadata-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.metadata-row span {
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.token-badge {
+  font-weight: 600;
+  color: white;
+}
+.token-high {
+  background: #16a34a;
+}
+.token-medium {
+  background: #f59e0b;
+}
+.token-low {
+  background: #dc2626;
+}

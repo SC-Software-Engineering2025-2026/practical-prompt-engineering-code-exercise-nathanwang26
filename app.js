@@ -23,14 +23,130 @@ function savePrompts(prompts) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(prompts));
 }
 
+/* ---------------- Metadata functions (prompt journal) ---------------- */
+
+function isValidISO(dt) {
+  try {
+    if (typeof dt !== "string") return false;
+    const d = new Date(dt);
+    if (Number.isNaN(d.getTime())) return false;
+    return d.toISOString() === dt;
+  } catch (e) {
+    return false;
+  }
+}
+
+function validateModelName(name) {
+  if (typeof name !== "string") throw new Error("Model name must be a string");
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Model name cannot be empty");
+  if (trimmed.length > 100)
+    throw new Error("Model name must be at most 100 characters");
+  return trimmed;
+}
+
+function estimateTokens(text, isCode) {
+  try {
+    if (typeof text !== "string") throw new Error("Text must be a string");
+    const cleaned = text.trim();
+    const word_count = cleaned ? cleaned.split(/\s+/).length : 0;
+    const char_count = cleaned.length;
+
+    let min = 0.75 * word_count;
+    let max = 0.25 * char_count;
+
+    if (isCode) {
+      min *= 1.3;
+      max *= 1.3;
+    }
+
+    // Round to nearest integer
+    min = Math.round(min);
+    max = Math.round(max);
+
+    const tokens = Math.max(min, max);
+    let confidence = "high";
+    if (tokens < 1000) confidence = "high";
+    else if (tokens <= 5000) confidence = "medium";
+    else confidence = "low";
+
+    return { min, max, confidence };
+  } catch (err) {
+    throw new Error("estimateTokens error: " + err.message);
+  }
+}
+
+function trackModel(modelName, content) {
+  try {
+    const model = validateModelName(modelName);
+    const createdAt = new Date().toISOString();
+    const isCode = false; // default; UI may pass true
+    const tokenEstimate = estimateTokens(content || "", isCode);
+    const metadata = {
+      model,
+      createdAt,
+      updatedAt: createdAt,
+      tokenEstimate,
+    };
+    return metadata;
+  } catch (err) {
+    throw new Error("trackModel error: " + err.message);
+  }
+}
+
+function updateTimestamps(metadata) {
+  try {
+    if (typeof metadata !== "object" || metadata === null)
+      throw new Error("metadata must be an object");
+    if (!isValidISO(metadata.createdAt))
+      throw new Error("createdAt must be a valid ISO 8601 string");
+    const updatedAt = new Date().toISOString();
+    if (new Date(updatedAt) < new Date(metadata.createdAt))
+      throw new Error("updatedAt cannot be earlier than createdAt");
+    metadata.updatedAt = updatedAt;
+    return metadata;
+  } catch (err) {
+    throw new Error("updateTimestamps error: " + err.message);
+  }
+}
+
+/* ---------------- end Metadata functions ---------------- */
+
 function renderPrompts() {
   const container = $("#promptsList");
   container.innerHTML = "";
-  let prompts = loadPrompts().slice().reverse();
+  let prompts = loadPrompts().slice();
 
   if (currentFilter === "top-rated") {
     prompts = prompts.filter((p) => (p.rating || 0) >= 4.0);
   }
+
+  // ensure backwards compatibility: convert numeric created to ISO in metadata if missing
+  prompts.forEach((p) => {
+    if (p.metadata && p.metadata.createdAt) return;
+    if (p.created) {
+      try {
+        p.metadata = p.metadata || {};
+        p.metadata.createdAt = new Date(p.created).toISOString();
+        p.metadata.updatedAt = p.metadata.createdAt;
+      } catch (e) {
+        p.metadata = p.metadata || {};
+      }
+    }
+  });
+
+  // sort by createdAt descending
+  prompts.sort((a, b) => {
+    const aDate =
+      a.metadata && a.metadata.createdAt
+        ? new Date(a.metadata.createdAt)
+        : new Date(0);
+    const bDate =
+      b.metadata && b.metadata.createdAt
+        ? new Date(b.metadata.createdAt)
+        : new Date(0);
+    return bDate - aDate;
+  });
 
   if (prompts.length === 0) {
     container.innerHTML =
@@ -51,6 +167,53 @@ function renderPrompts() {
     preview.textContent = contentPreview(p.content, 16);
     meta.appendChild(h3);
     meta.appendChild(preview);
+
+    // Metadata display (model, timestamps, token estimate)
+    if (p.metadata) {
+      const mdRow = document.createElement("div");
+      mdRow.className = "metadata-row";
+
+      const modelSpan = document.createElement("span");
+      modelSpan.className = "meta-model";
+      modelSpan.textContent = `Model: ${p.metadata.model}`;
+      mdRow.appendChild(modelSpan);
+
+      const created = p.metadata.createdAt;
+      const updated = p.metadata.updatedAt;
+      const createdSpan = document.createElement("span");
+      createdSpan.className = "meta-created";
+      try {
+        createdSpan.textContent = `Created: ${new Date(
+          created
+        ).toLocaleString()}`;
+      } catch (e) {
+        createdSpan.textContent = `Created: ${created}`;
+      }
+      mdRow.appendChild(createdSpan);
+
+      if (updated && updated !== created) {
+        const updatedSpan = document.createElement("span");
+        updatedSpan.className = "meta-updated";
+        try {
+          updatedSpan.textContent = `Updated: ${new Date(
+            updated
+          ).toLocaleString()}`;
+        } catch (e) {
+          updatedSpan.textContent = `Updated: ${updated}`;
+        }
+        mdRow.appendChild(updatedSpan);
+      }
+
+      if (p.metadata.tokenEstimate) {
+        const te = p.metadata.tokenEstimate;
+        const badge = document.createElement("span");
+        badge.className = `token-badge token-${te.confidence}`;
+        badge.textContent = `Tokens ≈ ${te.min}-${te.max} (${te.confidence})`;
+        mdRow.appendChild(badge);
+      }
+
+      meta.appendChild(mdRow);
+    }
 
     // Rating area
     const ratingWrap = document.createElement("div");
@@ -109,11 +272,31 @@ function contentPreview(text, words = 12) {
 
 function addPrompt(title, content) {
   const prompts = loadPrompts();
+  // create metadata with try/catch to ensure validation
+  let metadata = null;
+  try {
+    const modelName = (document.getElementById("modelName") || {}).value || "";
+    const isCode = !!(document.getElementById("isCode") || {}).checked;
+    // use estimateTokens with actual isCode flag
+    const tokenEstimate = estimateTokens(content, isCode);
+    const nowISO = new Date().toISOString();
+    metadata = {
+      model: validateModelName(modelName || "(unspecified)"),
+      createdAt: nowISO,
+      updatedAt: nowISO,
+      tokenEstimate,
+    };
+  } catch (err) {
+    // bubble up for UI to handle
+    throw err;
+  }
+
   const entry = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     title: title.trim(),
     content: content.trim(),
     created: Date.now(),
+    metadata,
     // rating metadata
     rating: 0,
     ratingCount: 0,
@@ -439,9 +622,19 @@ function setupHandlers() {
       alert("Prompt content cannot be empty.");
       return;
     }
-    addPrompt(title || "(untitled)", content);
-    $("#promptTitle").value = "";
-    $("#promptContent").value = "";
+    try {
+      addPrompt(title || "(untitled)", content);
+      $("#promptTitle").value = "";
+      $("#promptContent").value = "";
+      const mn = document.getElementById("modelName");
+      if (mn) mn.value = "";
+      const cb = document.getElementById("isCode");
+      if (cb) cb.checked = false;
+    } catch (err) {
+      alert(
+        "Unable to save prompt: " + (err && err.message ? err.message : err)
+      );
+    }
   });
 
   $("#themeToggle").addEventListener("click", () => {
