@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Prompt Library</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1 class="logo">Prompt Library</h1>
+      <div class="controls">
+        <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
+          🌙
+        </button>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="panel form-panel">
+        <h2>Add Prompt</h2>
+        <div class="form-row">
+          <label for="promptTitle">Title</label>
+          <input
+            id="promptTitle"
+            type="text"
+            placeholder="Short descriptive title"
+          />
+        </div>
+        <div class="form-row">
+          <label for="promptContent">Prompt</label>
+          <textarea
+            id="promptContent"
+            rows="6"
+            placeholder="Write your prompt here..."
+          ></textarea>
+        </div>
+        <div class="form-row">
+          <label for="modelName">Model</label>
+          <input id="modelName" type="text" placeholder="e.g., gpt-4o-mini" />
+        </div>
+        <div
+          class="form-row"
+          style="display: flex; align-items: center; gap: 8px"
+        >
+          <input id="isCode" type="checkbox" />
+          <label for="isCode"
+            >Treat content as code (affects token estimate)</label
+          >
+        </div>
+        <div class="form-actions">
+          <button id="savePrompt" class="btn primary">Save Prompt</button>
+        </div>
+      </section>
+
+      <section class="panel list-panel">
+        <h2>Saved Prompts</h2>
+        <div
+          class="list-controls"
+          style="margin-bottom: 12px; display: flex; gap: 8px"
+        >
+          <button id="filterTopRated" class="btn">Top Rated (4★+)</button>
+          <button id="clearFilter" class="btn">Show All</button>
+          <button id="exportPrompts" class="btn">Export</button>
+          <button id="importPrompts" class="btn">Import</button>
+          <input
+            id="importFile"
+            type="file"
+            accept="application/json"
+            style="display: none"
+          />
+        </div>
+        <div id="promptsList" class="cards" aria-live="polite"></div>
+      </section>
+    </main>
+    <!-- Notes panel (hidden until used) -->
+    <div
+      id="notesPanel"
+      class="notes-panel"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="notesTitle"
+    >
+      <!-- populated by JS -->
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
