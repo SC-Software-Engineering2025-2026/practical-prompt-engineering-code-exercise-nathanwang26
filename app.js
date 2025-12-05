@@ -677,3 +677,272 @@ document.addEventListener("DOMContentLoaded", () => {
   setupHandlers();
   renderPrompts();
 });
+
+/* ---------------- Export / Import system ---------------- */
+
+function computeStats(prompts) {
+  const total = prompts.length;
+  let ratingSum = 0;
+  let ratingCount = 0;
+  const modelCounts = {};
+  prompts.forEach((p) => {
+    if (typeof p.rating === "number") {
+      ratingSum += p.rating;
+      ratingCount += 1;
+    }
+    const model = (p.metadata && p.metadata.model) || "(unspecified)";
+    modelCounts[model] = (modelCounts[model] || 0) + 1;
+  });
+  const averageRating = ratingCount
+    ? Math.round((ratingSum / ratingCount) * 10) / 10
+    : 0;
+  let mostUsedModel = null;
+  let mostUsedCount = 0;
+  Object.keys(modelCounts).forEach((m) => {
+    if (modelCounts[m] > mostUsedCount) {
+      mostUsedModel = m;
+      mostUsedCount = modelCounts[m];
+    }
+  });
+  return { totalPrompts: total, averageRating, mostUsedModel };
+}
+
+function normalizePromptForExport(p) {
+  // ensure metadata exists and createdAt/updatedAt are ISO strings
+  const copy = JSON.parse(JSON.stringify(p));
+  copy.metadata = copy.metadata || {};
+  try {
+    if (!copy.metadata.createdAt) {
+      if (copy.created)
+        copy.metadata.createdAt = new Date(copy.created).toISOString();
+      else copy.metadata.createdAt = new Date().toISOString();
+    } else if (typeof copy.metadata.createdAt === "number") {
+      copy.metadata.createdAt = new Date(copy.metadata.createdAt).toISOString();
+    }
+  } catch (e) {
+    copy.metadata.createdAt = new Date().toISOString();
+  }
+  try {
+    if (!copy.metadata.updatedAt)
+      copy.metadata.updatedAt = copy.metadata.createdAt;
+    else if (typeof copy.metadata.updatedAt === "number")
+      copy.metadata.updatedAt = new Date(copy.metadata.updatedAt).toISOString();
+  } catch (e) {
+    copy.metadata.updatedAt = copy.metadata.createdAt;
+  }
+  return copy;
+}
+
+function buildExportSchema(prompts) {
+  const normalized = prompts.map(normalizePromptForExport);
+  const stats = computeStats(normalized);
+  return {
+    version: "1.0",
+    exportedAt: new Date().toISOString(),
+    stats,
+    prompts: normalized,
+  };
+}
+
+function triggerDownload(filename, text) {
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportPrompts() {
+  try {
+    const prompts = loadPrompts();
+    const schema = buildExportSchema(prompts);
+    const filename = `prompts-export-${new Date()
+      .toISOString()
+      .replace(/[:.]/g, "-")}.json`;
+    triggerDownload(filename, JSON.stringify(schema, null, 2));
+  } catch (err) {
+    alert("Export failed: " + (err && err.message ? err.message : err));
+  }
+}
+
+function generateNewId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function validateImportedSchema(obj) {
+  if (!obj || typeof obj !== "object")
+    throw new Error("Invalid JSON: not an object");
+  if (!obj.version) throw new Error("Missing version field");
+  if (!Array.isArray(obj.prompts)) throw new Error("Missing prompts array");
+  return true;
+}
+
+function backupExistingData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = STORAGE_KEY + ".backup." + new Date().toISOString();
+    localStorage.setItem(key, raw || "[]");
+    return key;
+  } catch (e) {
+    throw new Error("Failed to create backup: " + e.message);
+  }
+}
+
+function restoreBackup(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) throw new Error("Backup not found");
+    localStorage.setItem(STORAGE_KEY, raw);
+    return true;
+  } catch (e) {
+    throw new Error("Restore failed: " + e.message);
+  }
+}
+
+function importPromptsFromObject(obj, importMode) {
+  // importMode: 'merge' | 'replace' with possible duplicate sub-mode handled elsewhere
+  const existing = loadPrompts();
+  let result = [];
+  if (importMode === "replace") {
+    result = obj.prompts.slice();
+  } else {
+    // merge: bring in new prompts, handle duplicates later by caller choices
+    // start with existing, then add those not colliding
+    const existingById = {};
+    existing.forEach((p) => (existingById[p.id] = p));
+    const toAdd = [];
+    obj.prompts.forEach((imp) => {
+      if (!imp.id || !existingById[imp.id]) toAdd.push(imp);
+    });
+    result = existing.concat(toAdd);
+  }
+  savePrompts(result);
+  return result;
+}
+
+function handleImportFile(file) {
+  const reader = new FileReader();
+  reader.onload = function (ev) {
+    try {
+      const text = ev.target.result;
+      const parsed = JSON.parse(text);
+      validateImportedSchema(parsed);
+      if (parsed.version !== "1.0") {
+        const cont = confirm(
+          `Export version ${parsed.version} differs from expected 1.0. Continue import?`
+        );
+        if (!cont) return;
+      }
+
+      // detect duplicate ids
+      const existing = loadPrompts();
+      const existingIds = new Set(existing.map((p) => p.id));
+      const duplicateIds = parsed.prompts
+        .filter((p) => existingIds.has(p.id))
+        .map((p) => p.id);
+
+      let importMode = "merge"; // default
+      let duplicateResolution = "keep"; // 'keep' | 'overwrite' | 'keepboth'
+
+      if (duplicateIds.length > 0) {
+        // prompt user for resolution
+        const choice = prompt(
+          `Found ${duplicateIds.length} duplicate prompt IDs. Enter resolution: 'keep' (keep existing), 'overwrite' (replace existing), or 'keepboth' (keep both and generate new IDs for imported).`,
+          "keep"
+        );
+        if (!choice) return;
+        const c = choice.trim().toLowerCase();
+        if (!["keep", "overwrite", "keepboth"].includes(c)) {
+          alert("Invalid choice. Import cancelled.");
+          return;
+        }
+        duplicateResolution = c;
+        // If overwrite requested, we treat as replace for those ids only
+      }
+
+      // backup
+      const backupKey = backupExistingData();
+
+      try {
+        // build final merged array according to duplicateResolution
+        const existingById = {};
+        existing.forEach((p) => (existingById[p.id] = p));
+
+        const finalMap = Object.assign({}, existingById);
+
+        parsed.prompts.forEach((imp) => {
+          if (!imp.id) imp.id = generateNewId();
+          if (!existingById[imp.id]) {
+            // no conflict
+            finalMap[imp.id] = imp;
+            return;
+          }
+          // conflict
+          if (duplicateResolution === "keep") {
+            // skip imported
+            return;
+          }
+          if (duplicateResolution === "overwrite") {
+            finalMap[imp.id] = imp;
+            return;
+          }
+          if (duplicateResolution === "keepboth") {
+            // assign new id to imported
+            const newId = generateNewId();
+            imp.id = newId;
+            finalMap[newId] = imp;
+            return;
+          }
+        });
+
+        const merged = Object.keys(finalMap).map((k) => finalMap[k]);
+        savePrompts(merged);
+        renderPrompts();
+        alert("Import successful. Backup key: " + backupKey);
+      } catch (e) {
+        // restore
+        try {
+          restoreBackup(backupKey);
+        } catch (restoreErr) {
+          alert("Import failed and restore failed: " + restoreErr.message);
+          return;
+        }
+        alert("Import failed and was rolled back: " + e.message);
+      }
+    } catch (err) {
+      alert("Import error: " + (err && err.message ? err.message : err));
+    }
+  };
+  reader.onerror = function (ev) {
+    alert("Failed to read file: " + ev);
+  };
+  reader.readAsText(file);
+}
+
+function setupExportImportHandlers() {
+  const exp = document.getElementById("exportPrompts");
+  const imp = document.getElementById("importPrompts");
+  const input = document.getElementById("importFile");
+  if (exp) exp.addEventListener("click", () => exportPrompts());
+  if (imp && input) {
+    imp.addEventListener("click", () => input.click());
+    input.addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      handleImportFile(f);
+      // clear input to allow same file re-upload
+      input.value = "";
+    });
+  }
+}
+
+// wire handlers after DOM ready
+document.addEventListener("DOMContentLoaded", () => {
+  setupExportImportHandlers();
+});
+
+/* ---------------- end Export / Import ---------------- */

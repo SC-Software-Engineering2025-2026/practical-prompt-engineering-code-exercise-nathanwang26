@@ -24,3 +24,29 @@ UI:
 - Prompts are sorted by `createdAt` descending.
 
 To test locally: open `index.html` in a browser, add prompts, and inspect saved prompts and metadata. The data is stored in `localStorage` under key `prompt_library.prompts`.
+
+## Export / Import
+
+You can export all prompts (including metadata) to a JSON file and import them later.
+
+Export schema:
+
+{
+version: "1.0",
+exportedAt: "ISO 8601 timestamp",
+stats: { totalPrompts, averageRating, mostUsedModel },
+prompts: [ ... ]
+}
+
+How to use:
+
+- Click `Export` to download a JSON file containing prompts and metadata.
+- Click `Import` and select a previously exported file. If duplicate prompt IDs are found you'll be prompted to choose a resolution:
+  - `keep` — keep existing prompts and ignore imported duplicates
+  - `overwrite` — replace existing prompts with imported versions
+  - `keepboth` — keep both; imported duplicates get new generated IDs
+
+Import behavior includes:
+
+- Backup of current `prompt_library.prompts` is automatically created in `localStorage` with a `.backup.` timestamp suffix.
+- On failure, the import attempts to restore the backup and reports a detailed error message.
